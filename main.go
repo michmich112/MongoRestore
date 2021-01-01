@@ -53,6 +53,7 @@ func readConfig() RestoreOptions {
 	return config
 }
 
+// copyManagerOpts are the options that need to be passed to the copyManager
 type copyManagerOpts struct {
 	max      int
 	current  *[]string

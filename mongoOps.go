@@ -3,13 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
-	"sync"
-	"time"
-
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	mOptions "go.mongodb.org/mongo-driver/mongo/options"
+	"log"
+	"sync"
+	"time"
 )
 
 // MongoCtxDb is the type defining a Db connection instance and the context that is used by that instance
@@ -75,13 +74,16 @@ func CopyCollection(base MongoCtxDb, dest MongoCtxDb, collection string, filters
 	bufferSize := 1000 // buffer before inserting new documents
 	opts := mOptions.Find().SetBatchSize(1000)
 	cursor, err := base.db.Collection(collection).Find(base.ctx, filters, opts)
+
 	defer cursor.Close(base.ctx)
+
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+
 	var count int = 0
-	var results []interface{}
+	var results []interface{} // results slice
 	for cursor.Next(base.ctx) {
 		var result bson.M
 		if err := cursor.Decode(&result); err != nil {
@@ -91,14 +93,16 @@ func CopyCollection(base MongoCtxDb, dest MongoCtxDb, collection string, filters
 		count++
 		if count%bufferSize == 0 {
 			wg.Add(1)
-			go func() {
+			// create a new go routine to insert all the buffered documents
+			go func(res []interface{}) {
 				defer wg.Done()
-				dest.db.Collection(collection).InsertMany(dest.ctx, results)
-			}()
-			results = nil
+				opts := mOptions.InsertMany().SetOrdered(false)
+				dest.db.Collection(collection).InsertMany(dest.ctx, res, opts)
+			}(results[:])
+			results = results[len(results):] // reset the results
 		}
 	}
-	if results != nil {
+	if len(results) > 0 {
 		dest.db.Collection(collection).InsertMany(dest.ctx, results)
 	}
 	wg.Wait()
